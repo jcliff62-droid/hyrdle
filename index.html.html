@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyrdlePlus</title>
+    <style>
+        :root {
+            --hp-purple: #584F98;
+            --hp-cyan: #009FDA;
+            --hp-bg: #121212;
+            --hp-surface: #1E1E24;
+            --correct: #538d4e;
+            --present: #b59f3b;
+            --absent: #3a3a3c;
+            --border: #3a3a3c;
+            --key-bg: #818384;
+        }
+
+        * { box-sizing: border-box; font-family: 'Helvetica Neue', Arial, sans-serif; }
+        body { background-color: var(--hp-bg); color: white; margin: 0; display: flex; flex-direction: column; align-items: center; height: 100vh; overflow: hidden; }
+
+        /* Login Modal */
+        #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(18,18,18,0.98); z-index: 2000; display: flex; justify-content: center; align-items: center; }
+        .card { background: var(--hp-surface); padding: 2rem; border-radius: 12px; text-align: center; border-top: 5px solid var(--hp-purple); box-shadow: 0 0 20px rgba(0,159,218,0.2); width: 400px; max-width: 90%; max-height: 90vh; overflow-y: auto; }
+        h1 { margin-bottom: 0.5rem; letter-spacing: 2px; }
+        h1 span { color: var(--hp-cyan); }
+        input { padding: 12px; font-size: 1.1rem; border-radius: 5px; border: 1px solid var(--hp-purple); background: #000; color: white; margin-top: 15px; width: 80%; text-align: center; outline: none; }
+        button.btn-primary { margin-top: 20px; padding: 12px 25px; background: var(--hp-cyan); color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold; }
+        button.btn-primary:disabled { background: #555; cursor: not-allowed; }
+        .error-msg { color: #ff6b6b; font-size: 0.9rem; min-height: 20px; margin-top: 5px; }
+
+        /* Header & Game Area */
+        header { width: 100%; border-bottom: 1px solid var(--hp-purple); display: flex; justify-content: space-between; padding: 10px 20px; }
+        #timer-display { font-family: monospace; font-size: 1.2rem; color: var(--hp-cyan); }
+        #game-container { display: flex; flex-direction: column; align-items: center; justify-content: center; flex-grow: 1; width: 100%; max-width: 500px; position: relative; }
+        .grid { display: grid; grid-template-rows: repeat(6, 1fr); gap: 5px; margin: 20px 0; }
+        .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+        
+        /* Tiles */
+        .tile { width: 55px; height: 55px; border: 2px solid var(--border); display: flex; justify-content: center; align-items: center; font-size: 2rem; font-weight: bold; text-transform: uppercase; transition: border-color 0.1s ease; }
+        .tile[data-state='correct'] { background-color: var(--correct); border-color: var(--correct); }
+        .tile[data-state='present'] { background-color: var(--present); border-color: var(--present); }
+        .tile[data-state='absent'] { background-color: var(--absent); border-color: var(--absent); }
+        .tile[data-active='true'] { border-color: var(--hp-cyan); }
+
+        /* Animations */
+        @keyframes shake { 0%,100%{transform:translateX(0);} 20%,60%{transform:translateX(-4px);} 40%,80%{transform:translateX(4px);} }
+        .shake { animation: shake 0.4s; border-color: #d9534f !important; }
+        @keyframes errorShake { 0%,100%{transform:translateX(0); border-color:var(--border);} 20%,60%{transform:translateX(-5px); border-color:#ff3333;} 40%,80%{transform:translateX(5px); border-color:#ff3333;} }
+        .error-shake { animation: errorShake 0.4s; color: #ff3333; }
+
+        /* Keyboard */
+        #keyboard { width: 100%; padding: 0 10px; }
+        .key-row { display: flex; justify-content: center; gap: 6px; margin-bottom: 8px; }
+        .key { font-size: 1.2rem; font-weight: bold; padding: 15px 0; border-radius: 4px; background: var(--key-bg); cursor: pointer; flex: 1; display: flex; justify-content: center; user-select: none; position: relative; }
+        .key.wide { flex: 1.5; font-size: 0.9rem; }
+        .key[data-state='correct'] { background-color: var(--correct); }
+        .key[data-state='present'] { background-color: var(--present); }
+        
+        /* High-Resolution SVG X mark for absent keys */
+        .key[data-state='absent'] { 
+            background-color: var(--absent); 
+            color: rgba(255, 255, 255, 0.3);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cline x1='25' y1='25' x2='75' y2='75' stroke='rgba(255,255,255,0.3)' stroke-width='6' stroke-linecap='round'/%3E%3Cline x1='75' y1='25' x2='25' y2='75' stroke='rgba(255,255,255,0.3)' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
+        /* Leaderboard */
+        #leaderboard-container { position: absolute; right: 20px; top: 80px; background: var(--hp-surface); border: 1px solid var(--hp-purple); padding: 15px; border-radius: 8px; width: 250px; max-height: 80vh; overflow-y: auto; }
+        @media(max-width: 900px) { #leaderboard-container { display: none; } }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th { text-align: left; color: var(--hp-cyan); border-bottom: 1px solid #555; padding: 5px; }
+        td { padding: 5px; border-bottom: 1px solid #333; }
+
+        /* Toast */
+        #toast { position: absolute; top: 10%; background: var(--hp-surface); padding: 10px 20px; border-radius: 5px; border: 1px solid var(--hp-purple); opacity: 0; transition: opacity 0.3s; z-index: 1000; }
+        #toast.show { opacity: 1; }
+
+        /* Modals & Animations */
+        #result-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 3000; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+        @keyframes rotateDown { 0% { transform: rotate(0deg) scale(1); } 100% { transform: rotate(180deg) scale(1.2); } }
+        .thumb { font-size: 5rem; display: inline-block; animation: rotateDown 1s forwards; }
+        .snark-text { color: #ff6b6b; font-size: 1.4rem; font-style: italic; margin-top: 10px; }
+        
+        /* Fireworks Z-index updated to 3500 so it appears OVER the modal */
+        #fireworks { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3500; }
+    </style>
+</head>
+<body>
+
+    <!-- Login -->
+    <div id="login-overlay">
+        <div class="card">
+            <h1>Hyrdle<span>Plus</span></h1>
+            <p style="color:#aaa">Daily Challenge: <span id="date-display" style="color:white"></span></p>
+            
+            <input type="text" id="username" placeholder="Enter Your Name" autocomplete="off">
+            <div class="error-msg" id="login-error"></div>
+            <button class="btn-primary" id="start-btn" onclick="startGame()" disabled>Loading Dictionary...</button>
+            <div id="loading-status" style="font-size:0.85rem; color:#aaa; margin-top:15px;">Fetching official 12k word list...</div>
+            
+            <!-- Login Leaderboard Preview -->
+            <div id="login-leaderboard" style="margin-top: 25px; display: none;">
+                <h3 style="color:var(--hp-cyan); font-size: 1rem; margin-bottom: 10px;">Today's Leaders</h3>
+                <table style="width: 100%; font-size: 0.9rem;">
+                    <thead><tr><th>Rank</th><th>Name</th><th>Time</th><th>Gs</th></tr></thead>
+                    <tbody id="login-lb-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header>
+        <div style="font-weight:bold; font-size:1.5rem;">Hyrdle<span>Plus</span></div>
+        <div id="timer-display">00:00</div>
+    </header>
+
+    <!-- Game -->
+    <div id="game-container">
+        <div id="toast">Not in word list</div>
+        <div class="grid" id="grid"></div>
+        <div id="keyboard"></div>
+    </div>
+
+    <!-- Main Game Leaderboard -->
+    <div id="leaderboard-container">
+        <h3 style="margin-top:0; color:var(--hp-cyan)">Daily Leaderboard</h3>
+        <table>
+            <thead><tr><th>Rank</th><th>Name</th><th>Time</th><th>Gs</th></tr></thead>
+            <tbody id="lb-body"></tbody>
+        </table>
+    </div>
+
+    <canvas id="fireworks"></canvas>
+
+    <!-- Results -->
+    <div id="result-modal">
+        <div id="win-view" style="display:none;">
+            <div style="color:var(--correct); font-size:2rem; font-weight:bold;">Splendid!</div>
+            <p id="final-score" style="color:#aaa; font-size:1.2rem; margin-top:10px;"></p>
+        </div>
+        <div id="lose-view" style="display:none;">
+            <div class="thumb">👍</div>
+            <p class="snark-text" id="snark-msg"></p>
+            <p style="margin-top:20px;">The word was: <span id="reveal-word" style="color:var(--hp-cyan); font-weight:bold; font-size:1.2rem;"></span></p>
+        </div>
+        <button class="btn-primary" style="margin-top:30px;" onclick="location.reload()">Refresh for Leaderboard</button>
+    </div>
+
+<script>
+    const DICT_URL = "https://raw.githubusercontent.com/tabatkins/wordle-list/main/words";
+    let dictionary = new Set(); 
+    
+    // Type 'solution' or 'window.solution' in your browser console to see the word.
+    window.solution = ""; 
+    let solution = "";
+    
+    const todayStr = new Date().toLocaleDateString();
+    document.getElementById('date-display').innerText = todayStr;
+    const LB_KEY = `hyrdle_lb_${todayStr}`; 
+
+    const snarks = ["My cat types better than that.", "Did you fall asleep on the keyboard?", "Are you even trying?", "I've seen goldfish with better vocabulary.", "Maybe try a dictionary next time?", "Oof. That was painful to watch.", "Not even close, ace."];
+
+    // Initialize leaderboard immediately so it's visible on the login screen
+    renderLeaderboard();
+
+    async function initDictionary() {
+        try {
+            const res = await fetch(DICT_URL);
+            if(!res.ok) throw new Error();
+            const words = (await res.text()).split('\n').map(w => w.trim().toUpperCase()).filter(w => w.length === 5);
+            dictionary = new Set(words);
+            
+            // Generate Daily Word
+            let hash = 0;
+            for(let i=0; i<todayStr.length; i++) hash = ((hash << 5) - hash) + todayStr.charCodeAt(i);
+            
+            solution = words[Math.abs(hash) % words.length];
+            window.solution = solution; 
+
+            document.getElementById('loading-status').innerText = `${dictionary.size.toLocaleString()} words loaded.`;
+            document.getElementById('loading-status').style.color = "var(--correct)";
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('start-btn').innerText = "Start Game";
+            document.getElementById('username').focus();
+        } catch(e) {
+            document.getElementById('loading-status').innerText = "Error loading dictionary.";
+            document.getElementById('loading-status').style.color = "#ff6b6b";
+        }
+    }
+
+    let currentUser = "", startTime = null, timerInterval, currentRow = 0, currentTile = 0, isGameOver = false, guess = [];
+    let wrongPosHistory = [[], [], [], [], []]; 
+
+    document.getElementById('username').addEventListener('keypress', e => {
+        if(e.key === 'Enter' && !document.getElementById('start-btn').disabled) startGame();
+    });
+
+    function startGame() {
+        const raw = document.getElementById('username').value.trim();
+        if(!raw) return document.getElementById('login-error').innerText = "Name is required.";
+        const name = raw.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.substr(1).toLowerCase());
+        
+        const lb = JSON.parse(localStorage.getItem(LB_KEY) || "[]");
+        if(lb.some(x => x.name === name)) return document.getElementById('login-error').innerText = "Name already taken today.";
+        
+        currentUser = name;
+        document.getElementById('login-overlay').style.display = 'none';
+        initGrid(); initKeyboard();
+    }
+
+    function startTimerIfNeeded() {
+        if(!startTime) {
+            startTime = Date.now();
+            timerInterval = setInterval(() => {
+                const d = Math.floor((Date.now() - startTime) / 1000);
+                document.getElementById('timer-display').innerText = `${String(Math.floor(d/60)).padStart(2,'0')}:${String(d%60).padStart(2,'0')}`;
+            }, 1000);
+        }
+    }
+
+    function initGrid() {
+        const grid = document.getElementById('grid');
+        for(let r=0; r<6; r++) {
+            const row = document.createElement('div'); row.className = 'row';
+            for(let c=0; c<5; c++) {
+                const t = document.createElement('div'); t.className = 'tile'; t.id = `tile-${r}-${c}`; row.appendChild(t);
+            }
+            grid.appendChild(row);
+        }
+    }
+
+    function initKeyboard() {
+        const kb = document.getElementById('keyboard');
+        ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"].forEach((row, i) => {
+            const rDiv = document.createElement('div'); rDiv.className = 'key-row';
+            if(i === 2) { const e = document.createElement('div'); e.className='key wide'; e.innerText="ENTER"; e.onclick=submitGuess; rDiv.appendChild(e); }
+            row.split('').forEach(char => {
+                const k = document.createElement('div'); k.className='key'; k.id=`key-${char}`; k.innerText=char; k.onclick=()=>handleKey(char); rDiv.appendChild(k);
+            });
+            if(i === 2) { const b = document.createElement('div'); b.className='key wide'; b.innerText="⌫"; b.onclick=backspace; rDiv.appendChild(b); }
+            kb.appendChild(rDiv);
+        });
+    }
+
+    document.addEventListener('keydown', e => {
+        if(isGameOver || !currentUser) return;
+        if(e.key === 'Enter') submitGuess();
+        else if(e.key === 'Backspace') backspace();
+        else if(/^[a-zA-Z]$/.test(e.key)) handleKey(e.key.toUpperCase());
+    });
+
+    function handleKey(char) {
+        if(currentTile < 5) {
+            startTimerIfNeeded(); 
+            guess[currentTile] = char;
+            const tile = document.getElementById(`tile-${currentRow}-${currentTile}`);
+            tile.innerText = char; tile.setAttribute('data-active', 'true');
+            
+            if(wrongPosHistory[currentTile].includes(char)) {
+                tile.classList.remove('error-shake'); void tile.offsetWidth;
+                tile.classList.add('error-shake');
+                setTimeout(() => tile.classList.remove('error-shake'), 400);
+            }
+            currentTile++;
+        }
+    }
+
+    function backspace() {
+        if(currentTile > 0) {
+            currentTile--; guess[currentTile] = '';
+            const t = document.getElementById(`tile-${currentRow}-${currentTile}`);
+            t.innerText = ''; t.removeAttribute('data-active'); t.classList.remove('error-shake');
+        }
+    }
+
+    function submitGuess() {
+        if(currentTile !== 5) return;
+        const word = guess.join("");
+        if(!dictionary.has(word)) {
+            const row = document.querySelector(`#grid .row:nth-child(${currentRow+1})`);
+            row.classList.remove('shake'); void row.offsetWidth; row.classList.add('shake');
+            setTimeout(()=>row.classList.remove('shake'), 600);
+            document.getElementById('toast').classList.add('show');
+            setTimeout(()=>document.getElementById('toast').classList.remove('show'), 2000);
+            return;
+        }
+        
+        const solArr = solution.split(''), guessArr = word.split(''), states = Array(5).fill('absent');
+        guessArr.forEach((c, i) => { if(c === solArr[i]) { states[i] = 'correct'; solArr[i] = null; } else if(!wrongPosHistory[i].includes(c)) wrongPosHistory[i].push(c); });
+        guessArr.forEach((c, i) => { if(states[i] === 'absent' && solArr.includes(c)) { states[i] = 'present'; solArr[solArr.indexOf(c)] = null; } });
+
+        states.forEach((st, i) => {
+            setTimeout(() => {
+                const t = document.getElementById(`tile-${currentRow}-${i}`);
+                t.setAttribute('data-state', st); t.removeAttribute('data-active'); t.style.color='white';
+                const k = document.getElementById(`key-${guessArr[i]}`);
+                const old = k.getAttribute('data-state');
+                if(st === 'correct') k.setAttribute('data-state', 'correct');
+                else if(st === 'present' && old !== 'correct') k.setAttribute('data-state', 'present');
+                else if(st === 'absent' && old !== 'correct' && old !== 'present') k.setAttribute('data-state', 'absent');
+            }, i * 250);
+        });
+
+        setTimeout(() => {
+            if(word === solution) handleEnd(true);
+            else if(currentRow === 5) handleEnd(false);
+            else { currentRow++; currentTile = 0; guess = []; }
+        }, 1500);
+    }
+
+    function handleEnd(won) {
+        isGameOver = true; clearInterval(timerInterval);
+        const elapsed = startTime ? ((Date.now() - startTime)/1000).toFixed(2) : "0.00";
+        setTimeout(() => {
+            document.getElementById('result-modal').style.display = 'flex';
+            if(won) {
+                saveScore(elapsed, currentRow+1); 
+                
+                // Explicitly ensure fireworks canvas is visible every time
+                document.getElementById('fireworks').style.display = 'block';
+                startFireworks();
+                
+                document.getElementById('win-view').style.display = 'block';
+                document.getElementById('final-score').innerText = `Time: ${elapsed}s | Guesses: ${currentRow+1}`;
+                
+                // Fireworks timeout explicitly set to stop at 4 seconds
+                setTimeout(() => document.getElementById('fireworks').style.display='none', 4000);
+            } else {
+                document.getElementById('lose-view').style.display = 'block';
+                document.getElementById('snark-msg').innerText = snarks[Math.floor(Math.random()*snarks.length)];
+                document.getElementById('reveal-word').innerText = solution;
+            }
+        }, 1000);
+    }
+
+    function saveScore(t, g) {
+        let d = JSON.parse(localStorage.getItem(LB_KEY) || "[]");
+        d.push({name: currentUser, time: parseFloat(t), guesses: g});
+        d.sort((a,b) => a.time !== b.time ? a.time - b.time : a.guesses - b.guesses);
+        localStorage.setItem(LB_KEY, JSON.stringify(d)); 
+        renderLeaderboard();
+    }
+
+    function renderLeaderboard() {
+        const tb = document.getElementById('lb-body');
+        const loginTb = document.getElementById('login-lb-body');
+        const loginLbWrap = document.getElementById('login-leaderboard');
+        
+        tb.innerHTML = "";
+        loginTb.innerHTML = "";
+
+        const data = JSON.parse(localStorage.getItem(LB_KEY) || "[]");
+        
+        if (data.length > 0) {
+            loginLbWrap.style.display = 'block';
+        }
+
+        data.forEach((e, i) => {
+            // Number 1 Leader gets a +2pt font size increase and bold style
+            const styleString = i === 0 ? `style="font-size: calc(0.9rem + 2pt); font-weight: bold; color: #fff;"` : '';
+            const rowHtml = `<tr ${styleString}><td>${i+1}</td><td>${e.name}</td><td>${e.time}s</td><td>${e.guesses}</td></tr>`;
+            
+            tb.insertAdjacentHTML('beforeend', rowHtml);
+            loginTb.insertAdjacentHTML('beforeend', rowHtml);
+        });
+    }
+
+    function startFireworks() {
+        const cvs = document.getElementById('fireworks'), ctx = cvs.getContext('2d');
+        cvs.width = window.innerWidth; cvs.height = window.innerHeight;
+        const p=[], c=['#584F98','#009FDA','#FFD700','#FF4500','#FFFFFF'];
+        let run=true;
+        function anim() {
+            if(!run) return;
+            ctx.fillStyle='rgba(0,0,0,0.1)'; ctx.fillRect(0,0,cvs.width,cvs.height);
+            if(Math.random()<0.05) {
+                const x=Math.random()*cvs.width, y=Math.random()*cvs.height*0.5;
+                for(let i=0;i<30;i++) p.push({x:x, y:y, r:Math.random()*2+1, cl:c[Math.floor(Math.random()*c.length)], vx:(Math.random()-.5)*6, vy:(Math.random()-.5)*6, a:1});
+            }
+            for(let i=0;i<p.length;i++) {
+                p[i].x+=p[i].vx; p[i].y+=p[i].vy; p[i].a-=0.01;
+                ctx.save(); ctx.globalAlpha=p[i].a; ctx.beginPath(); ctx.arc(p[i].x,p[i].y,p[i].r,0,Math.PI*2); ctx.fillStyle=p[i].cl; ctx.fill(); ctx.restore();
+                if(p[i].a<=0) { p.splice(i,1); i--; }
+            }
+            requestAnimationFrame(anim);
+        }
+        anim(); 
+        
+        // Stop animation engine strictly at 4 seconds
+        setTimeout(() => {
+            run=false;
+            ctx.clearRect(0,0,cvs.width,cvs.height);
+        }, 4000);
+    }
+
+    initDictionary();
+</script>
+</body>
+</html>
